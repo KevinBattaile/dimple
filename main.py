@@ -17,6 +17,7 @@
 import os
 import sys
 import argparse
+import gemmi
 if __name__ == '__main__' and __package__ is None:
     sys.path.insert(1, os.path.dirname(os.path.dirname(os.path.abspath(__file__
                                                                        ))))
@@ -47,6 +48,31 @@ BAD_FINAL_RFREE = 0.5
 GOOD_FINAL_RFREE = 0.4
 
 def dimple(wf, opt):
+
+    # --- START ALPHAFOLD PRE-PROCESSOR FIX ---
+
+    if getattr(opt, 'pdbs', None):
+        for i, pdb_path in enumerate(opt.pdbs):
+            _st = gemmi.read_structure(pdb_path)
+
+            # If we detect an AlphaFold dummy cell (a-axis <2)
+            if _st.cell.a < 2.0:
+                # Assign a save, massive dummy cell
+                # Volume = 1,000,000 A^3. rwcontents won't crash
+                # It will NOT match the MTZ, forcing dimple to use the phaser-mr path
+                _st.cell = gemmi.UnitCell(100.0, 100.0, 100.0, 90.0, 90.0, 90.0)
+                _st.spacegroup_hm = 'P 1'
+
+                # Write to the absolute path of the output directory
+                new_filename = "fixed_AF_" + os.path.basename(pdb_path)
+                absolute_out_dir = os.path.abspath(opt.output_dir)
+                fixed_path = os.path.join(absolute_out_dir, new_filename)
+                _st.write_pdb(fixed_path)
+                opt.pdbs[i] = fixed_path
+
+    # --- END ALPHAFOLD PRE-PROCESSOR FIX ---            
+
+    
     comment('     ### Dimple v%s. Problems and suggestions:'
             ' ccp4.github.io/dimple ###' % __version__)
     mtz_meta = wf.read_mtz_metadata(opt.mtz)
