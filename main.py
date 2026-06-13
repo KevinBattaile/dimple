@@ -50,26 +50,31 @@ GOOD_FINAL_RFREE = 0.4
 def dimple(wf, opt):
 
     # --- START ALPHAFOLD PRE-PROCESSOR FIX ---
+    for i, pdb_path in enumerate(opt.pdbs):
+        if os.path.isfile(pdb_path):
+            try:
+                pdb_st = gemmi.read_structure(pdb_path)
 
-    if getattr(opt, 'pdbs', None):
-        for i, pdb_path in enumerate(opt.pdbs):
-            _st = gemmi.read_structure(pdb_path)
+                # Check for the AlphaFold dummy cell (a-axis <2)
+                if pdb_st.cell.a < 2.0:
+                    # Assign a safe, massive dummy cell
+                    # Volume = 1,000,000 A^3. rwcontents won't crash
+                    # It will NOT match the MTZ, forcing dimple to use the phaser-mr path
+                    pdb_st.cell = gemmi.UnitCell(100.0, 100.0, 100.0, 90.0, 90.0, 90.0)
+                    pdb_st.spacegroup_hm = 'P 1'
 
-            # If we detect an AlphaFold dummy cell (a-axis <2)
-            if _st.cell.a < 2.0:
-                # Assign a save, massive dummy cell
-                # Volume = 1,000,000 A^3. rwcontents won't crash
-                # It will NOT match the MTZ, forcing dimple to use the phaser-mr path
-                _st.cell = gemmi.UnitCell(100.0, 100.0, 100.0, 90.0, 90.0, 90.0)
-                _st.spacegroup_hm = 'P 1'
+                    # Write to the absolute path of the output directory
+                    new_filename = "fixed_AF_" + os.path.basename(pdb_path)
+                    absolute_out_dir = os.path.abspath(opt.output_dir)
+                    fixed_path = os.path.join(absolute_out_dir, new_filename)
+                    pdb_st.write_pdb(fixed_path)
+                    
+                    # Update Dimple's internal list to use the new patched file
+                    opt.pdbs[i] = fixed_path
 
-                # Write to the absolute path of the output directory
-                new_filename = "fixed_AF_" + os.path.basename(pdb_path)
-                absolute_out_dir = os.path.abspath(opt.output_dir)
-                fixed_path = os.path.join(absolute_out_dir, new_filename)
-                _st.write_pdb(fixed_path)
-                opt.pdbs[i] = fixed_path
-
+            except Exception as e:
+                # If gemmi fails for any reason, print a warning but don't crash
+                print(f"[*] Pre-processor warning: Could not read PDB with Gemmi ({e}). Proceeding...")
     # --- END ALPHAFOLD PRE-PROCESSOR FIX ---            
 
     
